@@ -3,15 +3,14 @@ import redis
 from textwrap import dedent
 
 from environs import Env
+from geopy import distance
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice
 from telegram.ext import Filters, Updater
 from telegram.ext import CallbackQueryHandler, CommandHandler, MessageHandler
 
-from bot_functions import find_nearest_pizzeria, get_text_of_delivery
-from bot_functions import get_delivery_options_keyboard
 from moltin_api import add_product_to_cart, get_cart_and_full_price, remove_product_from_cart
 from moltin_api import create_customers_address, get_image_url, get_products, get_product_by_id
-from moltin_api import get_deliveryman_id_by_pizzeria_address
+from moltin_api import get_deliveryman_id_by_pizzeria_address, get_all_pizzerias
 from yandex_api import fetch_coordinates
 
 _database = None
@@ -65,6 +64,93 @@ def get_cart(cart_id):
         cart_keyboard.append([InlineKeyboardButton("Оплатить", callback_data="checkout")])
 
     return text, cart_keyboard
+
+
+def find_nearest_pizzeria(client_id, client_secret, coords):
+    pizzerias = get_all_pizzerias(client_id, client_secret)
+
+    min_distance = 0
+    pizzeria_address = ''
+
+    for pizzeria in pizzerias['data']:
+        pizzeria_pos = (pizzeria['latitude'], pizzeria['longitude'])
+        distance_between_two_points = distance.distance(coords, pizzeria_pos).km
+
+        if min_distance:
+            if distance_between_two_points < min_distance:
+                min_distance = distance_between_two_points
+                pizzeria_address = pizzeria['address']
+        else:
+            min_distance = distance_between_two_points
+
+    return min_distance, pizzeria_address
+
+
+def get_text_of_delivery(min_distance, pizzeria_address):
+    if min_distance <= 0.5:
+        min_distance = int(min_distance * 1000)
+
+        text = dedent(
+            f"""\
+            Может, заберёте пиццу из нашей пиццерии не подалеку?
+            Она всего в {min_distance} метрах от вас!
+            Вот её адрес: {pizzeria_address}.
+
+            А можем и бесплатно доставить с:\
+            """
+        )
+    elif min_distance <= 5:
+        text = dedent(
+            f"""\
+            Похоже, придётся ехать до вас на самокате.
+            Доставка будет стоить 100 рублей. Доставляем или самовывоз?\
+            """
+        )
+    elif min_distance <= 20:
+        text = dedent(
+            f"""\
+            Похоже, придётся ехать до вас на машинке.
+            Доставка будет стоить 300 рублей. Доставляем или самовывоз?\
+            """
+        )
+    elif min_distance <= 50:
+        text = dedent(
+            f"""\
+            Вы находитесь от нас очень далеко, а именно в {min_distance} км.
+            Мы можем предложить вам только самовывоз.\
+            """
+        )
+    else:
+        min_distance = int(min_distance)
+
+        text = dedent(
+            f"""\
+            Вы находитесь от нас очень далеко, а именно в {min_distance} км.
+            Мы не сможем доставить пиццу :(\
+            """
+        )
+
+    return text
+
+
+def get_delivery_options_keyboard(min_distance):
+    if min_distance <= 20:
+        options_keyboard = [
+            [InlineKeyboardButton("Доставка", callback_data="delivery")],
+            [InlineKeyboardButton("Самовывоз", callback_data="pickup")],
+            [InlineKeyboardButton("В меню", callback_data="return")]
+        ]
+    elif min_distance <= 50:
+        options_keyboard = [
+            [InlineKeyboardButton("Самовывоз", callback_data="pickup")],
+            [InlineKeyboardButton("В меню", callback_data="return")]
+        ]
+    else:
+        options_keyboard = [
+            [InlineKeyboardButton("В меню", callback_data="return")]
+        ]
+
+    return options_keyboard
 
 
 def start(update, context):
@@ -231,7 +317,7 @@ def handle_cart(update, context):
 
 
 def waiting_geo(update, context):
-    global pizzeria_address, coords
+    # global pizzeria_address, coords
 
     if update.message == None:
         users_reply = update.callback_query.data
@@ -254,12 +340,12 @@ def waiting_geo(update, context):
 
     wrong_address = False
 
-    if users_reply == None:
+    if not users_reply:
         coords = (update.message.location.latitude, update.message.location.longitude)
     else:
         coords = fetch_coordinates(env['apikey'], users_reply)
 
-    if coords == None:
+    if not coords:
         text = 'Такого адреса не существует. Введите адрес заново, либо вернитесь в меню.'
         wrong_address = True
     else:
@@ -281,7 +367,11 @@ def waiting_geo(update, context):
         reply_markup=InlineKeyboardMarkup(options_keyboard)
     )
 
-    if wrong_address == True:
+
+    context.user_data['latitude'], context.user_data['longitude'] = coords
+    context.user_data['pizzeria_address'] = pizzeria_address
+
+    if wrong_address:
         state = 'WAITING_GEO'
     else:
         state = 'HANDLE_DELIVERY'
@@ -313,14 +403,14 @@ def handle_delivery(update, context):
             env['client_id'], 
             env['client_secret'],
             chat_id,
-            coords[0],
-            coords[1]
+            context.user_data['latitude'],
+            context.user_data['longitude']
         )
 
         deliveryman_id = get_deliveryman_id_by_pizzeria_address(
             env['client_id'], 
             env['client_secret'],
-            pizzeria_address
+            context.user_data['pizzeria_address']
         )
 
         text, cart_keyboard = get_cart(chat_id)
@@ -332,8 +422,8 @@ def handle_delivery(update, context):
 
         context.bot.send_location(
             chat_id = deliveryman_id,
-            latitude = coords[0],
-            longitude = coords[1]
+            latitude = context.user_data['latitude'],
+            longitude = context.user_data['longitude']
         )
 
         text = 'Заказ передан в службу доставки.'
@@ -409,7 +499,7 @@ def handle_payment(update, context):
     )
 
     context.job_queue.run_once(
-        callback_3600,
+        callback_to_user,
         3600,
         context=chat_id
     )
@@ -425,7 +515,7 @@ def precheckout_callback(update, context):
         query.answer(ok=True)
 
 
-def callback_3600(context):
+def callback_to_user(context):
     text = dedent(
         f"""\
         Приятного аппетита! *место для рекламы*
@@ -480,7 +570,7 @@ def handle_users_reply(update, context):
 
 def get_database_connection(password, host, port):
     global _database
-    if _database is None:
+    if not _database:
         _database = redis.Redis(host=host, port=port, password=password)
     return _database
 
@@ -501,7 +591,7 @@ def get_env():
     }
 
 
-def error(bot, update, error):
+def handle_error(bot, update, error):
     logger.warning('Update "%s" caused error "%s"', update, error)
 
 
@@ -518,7 +608,7 @@ def main():
     dispatcher.add_handler(MessageHandler(Filters.text, handle_users_reply))
     dispatcher.add_handler(MessageHandler(Filters.location, handle_users_reply))
     dispatcher.add_handler(CommandHandler('start', handle_users_reply))
-    dispatcher.add_error_handler(error)
+    dispatcher.add_error_handler(handle_error)
     updater.start_polling()
     updater.idle()
 
