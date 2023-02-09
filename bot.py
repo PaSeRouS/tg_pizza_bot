@@ -297,8 +297,6 @@ def handle_cart(update, context):
 
 
 def waiting_geo(update, context):
-    # global pizzeria_address, coords
-
     if update.message == None:
         users_reply = update.callback_query.data
     else:
