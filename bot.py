@@ -486,7 +486,7 @@ def handle_payment(update, context):
     )
 
     context.job_queue.run_once(
-        callback_to_user,
+        write_to_user,
         3600,
         context=chat_id
     )
@@ -502,7 +502,7 @@ def precheckout_callback(update, context):
         query.answer(ok=True)
 
 
-def callback_to_user(context):
+def write_to_user(context):
     text = dedent(
         f"""\
         Приятного аппетита! *место для рекламы*
