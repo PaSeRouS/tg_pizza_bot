@@ -66,26 +66,6 @@ def get_cart(cart_id):
     return text, cart_keyboard
 
 
-def find_nearest_pizzeria(client_id, client_secret, coords):
-    pizzerias = get_all_pizzerias(client_id, client_secret)
-
-    min_distance = 0
-    pizzeria_address = ''
-
-    for pizzeria in pizzerias['data']:
-        pizzeria_pos = (pizzeria['latitude'], pizzeria['longitude'])
-        distance_between_two_points = distance.distance(coords, pizzeria_pos).km
-
-        if min_distance:
-            if distance_between_two_points < min_distance:
-                min_distance = distance_between_two_points
-                pizzeria_address = pizzeria['address']
-        else:
-            min_distance = distance_between_two_points
-
-    return min_distance, pizzeria_address
-
-
 def get_text_of_delivery(min_distance, pizzeria_address):
     if min_distance <= 0.5:
         min_distance = int(min_distance * 1000)
@@ -349,18 +329,25 @@ def waiting_geo(update, context):
         text = 'Такого адреса не существует. Введите адрес заново, либо вернитесь в меню.'
         wrong_address = True
     else:
-        min_distance, pizzeria_address = find_nearest_pizzeria(
-            env['client_id'], 
-            env['client_secret'],
-            coords
+        all_pizzerias = get_all_pizzerias(env['client_id'], env['client_secret'])
+        
+        for pizzeria in all_pizzerias:
+            pizzeria['distance'] = distance.distance(
+                coords,
+                (pizzeria['latitude'], pizzeria['longitude'])
+            ).km
+    
+        nearest_pizzeria = min(
+            all_pizzerias,
+            key=lambda pizzeria: pizzeria['distance']
         )
-
+        
         text = get_text_of_delivery(
-            min_distance,
-            pizzeria_address
+            nearest_pizzeria['distance'],
+            nearest_pizzeria['address']
         )
 
-    options_keyboard = get_delivery_options_keyboard(min_distance)
+    options_keyboard = get_delivery_options_keyboard(nearest_pizzeria['distance'])
 
     update.message.reply_text(
         text=text,
@@ -369,7 +356,7 @@ def waiting_geo(update, context):
 
 
     context.user_data['latitude'], context.user_data['longitude'] = coords
-    context.user_data['pizzeria_address'] = pizzeria_address
+    context.user_data['pizzeria_address'] = nearest_pizzeria['address']
 
     if wrong_address:
         state = 'WAITING_GEO'

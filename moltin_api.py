@@ -123,7 +123,7 @@ def get_all_pizzerias(client_id, client_secret):
     response = requests.get('https://api.moltin.com/v2/flows/pizzeria/entries?page[limit]=100', headers=headers)
     response.raise_for_status()
 
-    return response.json()
+    return response.json()['data']
 
 
 def create_customers_address(
