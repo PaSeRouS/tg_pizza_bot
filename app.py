@@ -75,6 +75,32 @@ def get_elements_for_generic():
 
     products = get_products_for_facebook(client_id, client_secret)
 
+    # Основное меню пиццерии
+    element = {
+        "title": "Меню",
+        "image_url": "https://img.freepik.com/premium-vector/pizza-logo-template-suitable-for-restaurant-and-cafe-logo_607277-267.jpg",
+        "subtitle": "Здесь выможете выбрать один из вариантов",
+        "buttons": [
+            {
+                "type": "postback",
+                "title": "Корзина",
+                "payload": "cart",
+            },
+            {
+                "type": "postback",
+                "title": "Акции",
+                "payload": "promotion",
+            },
+            {
+                "type": "postback",
+                "title": "Сделать заказ",
+                "payload": "make_order",
+            }
+        ]
+    }
+
+    elements.append(element)
+
     for product in products["data"]:
         product_name = product["name"]
         price = product["price"][0]["amount"]
