@@ -48,6 +48,18 @@ def get_products(client_id, client_secret):
             for product in product_data['data']
         }
 
+
+def get_products_for_facebook(client_id, client_secret):
+    headers = get_headers(client_id, client_secret)
+
+    response = requests.get('https://api.moltin.com/v2/products', headers=headers)
+    response.raise_for_status()
+
+    product_data = response.json()
+    
+    return product_data
+
+
 def get_product_by_id(product_id, client_id, client_secret):
     headers = get_headers(client_id, client_secret)
 

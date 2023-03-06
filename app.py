@@ -3,7 +3,7 @@ import os
 import requests
 from flask import Flask, request
 
-from moltin_api import get_products
+from moltin_api import get_products_for_facebook, get_image_url
 
 app = Flask(__name__)
 FACEBOOK_TOKEN = os.environ["PAGE_ACCESS_TOKEN"]
@@ -27,7 +27,7 @@ def webhook():
     Основной вебхук, на который будут приходить сообщения от Facebook.
     """
     data = request.get_json()
-    # print(data)
+    
     if data["object"] == "page":
         for entry in data["entry"]:
             for messaging_event in entry["messaging"]:
@@ -36,24 +36,6 @@ def webhook():
                     recipient_id = messaging_event["recipient"]["id"]
                     send_menu(sender_id)
     return "ok", 200
-
-
-def send_message(recipient_id, message_text):
-    params = {"access_token": FACEBOOK_TOKEN}
-    headers = {"Content-Type": "application/json"}
-    request_content = {
-        "recipient": {
-            "id": recipient_id
-        },
-        "message": {
-            "text": message_text
-        }
-    }
-    response = requests.post(
-        "https://graph.facebook.com/v2.6/me/messages",
-        params=params, headers=headers, json=request_content
-    )
-    response.raise_for_status()
 
 
 def send_menu(recipient_id):
@@ -88,36 +70,36 @@ def get_elements_for_generic():
     buttons = []
     index = 0
 
-    products = get_products(os.environ["CLIENT_ID"], os.environ["CLIENT_SECRET"])
+    client_id = os.environ["CLIENT_ID"]
+    client_secret = os.environ["CLIENT_SECRET"]
 
-    for product_name, product_id in products.items():
-        if index % 3 == 0 and index != 0 and index < 30:
+    products = get_products_for_facebook(client_id, client_secret)
+
+    for product in products["data"]:
+        product_name = product["name"]
+        price = product["price"][0]["amount"]
+        title = f"{product_name} ({price} р.)"
+
+        if index < 5:
+            image_id = product["relationships"]["main_image"]["data"]["id"]
+            image_url = get_image_url(image_id, client_id, client_secret)
+            
             element = {
-                "title": "Меню пиццерии",
-                "buttons": buttons
+                "title": title,
+                "image_url": image_url,
+                "subtitle": product["description"],
+                "buttons": [
+                    {
+                        "type": "postback",
+                        "title": "Добавить в корзину",
+                        "payload": product["id"],
+                    }
+                ]
             }
 
             elements.append(element)
 
-            buttons = []
-
         index += 1
-
-        button = {
-            "type": "postback",
-            "title": product_name,
-            "payload": product_id,
-        }
-
-        buttons.append(button)
-
-    if index < 30:
-        element = {
-            "title": "Меню пиццерии",
-            "buttons": buttons
-        }
-
-        elements.append(element)
 
     return elements
 
