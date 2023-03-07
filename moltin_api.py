@@ -177,4 +177,13 @@ def get_products_by_category_id(client_id, client_secret, category_id):
     response.raise_for_status()
 
     return response.json()
+
+
+def get_all_categories(client_id, client_secret):
+    headers = get_headers(client_id, client_secret)
+
+    response = requests.get('https://api.moltin.com/v2/categories', headers=headers)
+    response.raise_for_status()
+
+    return response.json()
     
