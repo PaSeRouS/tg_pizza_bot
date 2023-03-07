@@ -49,17 +49,6 @@ def get_products(client_id, client_secret):
         }
 
 
-def get_products_for_facebook(client_id, client_secret):
-    headers = get_headers(client_id, client_secret)
-
-    response = requests.get('https://api.moltin.com/v2/products', headers=headers)
-    response.raise_for_status()
-
-    product_data = response.json()
-    
-    return product_data
-
-
 def get_product_by_id(product_id, client_id, client_secret):
     headers = get_headers(client_id, client_secret)
 
@@ -175,3 +164,17 @@ def get_deliveryman_id_by_pizzeria_address(client_id, client_secret, address):
     for pizzeria in pizzerias['data']:
         if address == pizzeria['address']:
             return pizzeria['deliveryman-id']
+
+
+def get_products_by_category_id(client_id, client_secret, category_id):
+    headers = get_headers(client_id, client_secret)
+
+    params = {
+        'filter': f'eq(category.id,{category_id})',
+    }
+
+    response = requests.get('https://api.moltin.com/v2/products', headers=headers, params=params)
+    response.raise_for_status()
+
+    return response.json()
+    
