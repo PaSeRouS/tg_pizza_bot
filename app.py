@@ -4,6 +4,7 @@ import requests
 from flask import Flask, request
 
 from moltin_api import get_image_url, get_products_by_category_id
+from moltin_api import get_all_categories
 
 app = Flask(__name__)
 FACEBOOK_TOKEN = os.environ["PAGE_ACCESS_TOKEN"]
@@ -27,13 +28,14 @@ def webhook():
     Основной вебхук, на который будут приходить сообщения от Facebook.
     """
     data = request.get_json()
-    
+
     if data["object"] == "page":
         for entry in data["entry"]:
             for messaging_event in entry["messaging"]:
                 if messaging_event.get("message"):
                     sender_id = messaging_event["sender"]["id"]
                     recipient_id = messaging_event["recipient"]["id"]
+                    message_text = messaging_event["message"]["text"]
                     send_menu(sender_id)
     return "ok", 200
 
@@ -73,7 +75,7 @@ def get_elements_for_generic():
     client_secret = os.environ["CLIENT_SECRET"]
 
     category_id = '8343ea23-9873-465c-97e1-70f115247765' # Временно хардкод
-    products = get_products_by_category_id(client_id, client_secret, category_id)
+    categories = get_all_categories(client_id, client_secret)
 
     # Основное меню пиццерии
     element = {
@@ -101,31 +103,51 @@ def get_elements_for_generic():
 
     elements.append(element)
 
-    for product in products["data"]:
-        product_name = product["name"]
-        price = product["price"][0]["amount"]
-        title = f"{product_name} ({price} р.)"
+    for category in categories['data']:
+        if category['name'] == 'main_pizzas':
+            category_id = category['id']
+            products = get_products_by_category_id(client_id, client_secret, category_id)
+            for product in products["data"]:
+                product_name = product["name"]
+                price = product["price"][0]["amount"]
+                title = f"{product_name} ({price} р.)"
 
-        image_id = product["relationships"]["main_image"]["data"]["id"]
-        image_url = get_image_url(image_id, client_id, client_secret)
+                image_id = product["relationships"]["main_image"]["data"]["id"]
+                image_url = get_image_url(image_id, client_id, client_secret)
 
-        element = {
-            "title": title,
-            "image_url": image_url,
-            "subtitle": product["description"],
-            "buttons": [
-                {
-                    "type": "postback",
-                    "title": "Добавить в корзину",
-                    "payload": product["id"],
+                element = {
+                    "title": title,
+                    "image_url": image_url,
+                    "subtitle": product["description"],
+                    "buttons": [
+                        {
+                            "type": "postback",
+                            "title": "Добавить в корзину",
+                            "payload": product["id"],
+                        }
+                    ]
                 }
-            ]
-        }
 
-        elements.append(element)
+                elements.append(element)
+        else:
+            button = {
+                "type": "postback",
+                "title": category['description'],
+                "payload": category['id'],
+            }
+
+            buttons.append(button)
+
+    element = {
+        "title": "Не нашли нужную пиццу?",
+        "image_url": "https://primepizza.ru/uploads/position/large_0c07c6fd5c4dcadddaf4a2f1a2c218760b20c396.jpg",
+        "subtitle": "Остальные пиццы можно посмотреть в одной из категорий",
+        "buttons": buttons
+    }
+
+    elements.append(element)
 
     return elements
-
 
 if __name__ == '__main__':
     app.run(debug=True)
