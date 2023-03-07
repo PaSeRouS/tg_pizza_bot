@@ -3,7 +3,7 @@ import os
 import requests
 from flask import Flask, request
 
-from moltin_api import get_products_for_facebook, get_image_url
+from moltin_api import get_image_url, get_products_by_category_id
 
 app = Flask(__name__)
 FACEBOOK_TOKEN = os.environ["PAGE_ACCESS_TOKEN"]
@@ -68,12 +68,12 @@ def get_elements_for_generic():
     # В сообщении кнопки выводятся по три штуки в сообщении и только на 10 слайдах
     elements = []
     buttons = []
-    index = 0
 
     client_id = os.environ["CLIENT_ID"]
     client_secret = os.environ["CLIENT_SECRET"]
 
-    products = get_products_for_facebook(client_id, client_secret)
+    category_id = '8343ea23-9873-465c-97e1-70f115247765' # Временно хардкод
+    products = get_products_by_category_id(client_id, client_secret, category_id)
 
     # Основное меню пиццерии
     element = {
@@ -106,26 +106,23 @@ def get_elements_for_generic():
         price = product["price"][0]["amount"]
         title = f"{product_name} ({price} р.)"
 
-        if index < 5:
-            image_id = product["relationships"]["main_image"]["data"]["id"]
-            image_url = get_image_url(image_id, client_id, client_secret)
-            
-            element = {
-                "title": title,
-                "image_url": image_url,
-                "subtitle": product["description"],
-                "buttons": [
-                    {
-                        "type": "postback",
-                        "title": "Добавить в корзину",
-                        "payload": product["id"],
-                    }
-                ]
-            }
+        image_id = product["relationships"]["main_image"]["data"]["id"]
+        image_url = get_image_url(image_id, client_id, client_secret)
 
-            elements.append(element)
+        element = {
+            "title": title,
+            "image_url": image_url,
+            "subtitle": product["description"],
+            "buttons": [
+                {
+                    "type": "postback",
+                    "title": "Добавить в корзину",
+                    "payload": product["id"],
+                }
+            ]
+        }
 
-        index += 1
+        elements.append(element)
 
     return elements
 
