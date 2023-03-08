@@ -533,7 +533,8 @@ def handle_users_reply(update, context):
     if user_reply == '/start':
         user_state = 'START'
     else:
-        user_state = db.get(chat_id).decode("utf-8")
+        db_key = f"telegramid_{sender_id}"
+        user_state = db.get(db_key).decode("utf-8")
 
     states_functions = {
         'START': start,
@@ -548,7 +549,7 @@ def handle_users_reply(update, context):
 
     try:
         next_state = state_handler(update, context)
-        db.set(chat_id, next_state)
+        db.set(db_key, next_state)
     except Exception as err:
         print(err)
 

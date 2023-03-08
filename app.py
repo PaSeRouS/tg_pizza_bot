@@ -1,5 +1,6 @@
 import os
 
+import redis
 import requests
 from flask import Flask, request
 
@@ -22,25 +23,7 @@ def verify():
     return "Hello world", 200
 
 
-@app.route('/', methods=['POST'])
-def webhook():
-    """
-    Основной вебхук, на который будут приходить сообщения от Facebook.
-    """
-    data = request.get_json()
-
-    if data["object"] == "page":
-        for entry in data["entry"]:
-            for messaging_event in entry["messaging"]:
-                if messaging_event.get("message"):
-                    sender_id = messaging_event["sender"]["id"]
-                    recipient_id = messaging_event["recipient"]["id"]
-                    message_text = messaging_event["message"]["text"]
-                    send_menu(sender_id)
-    return "ok", 200
-
-
-def send_menu(recipient_id):
+def send_menu(recipient_id, message_text):
     params = {"access_token": FACEBOOK_TOKEN}
     headers = {"Content-Type": "application/json"}
 
@@ -74,7 +57,6 @@ def get_elements_for_generic():
     client_id = os.environ["CLIENT_ID"]
     client_secret = os.environ["CLIENT_SECRET"]
 
-    category_id = '8343ea23-9873-465c-97e1-70f115247765' # Временно хардкод
     categories = get_all_categories(client_id, client_secret)
 
     # Основное меню пиццерии
@@ -148,6 +130,63 @@ def get_elements_for_generic():
     elements.append(element)
 
     return elements
+
+
+def handle_start(sender_id, message_text):
+    send_menu(sender_id, message_text)
+    return "START"
+
+
+def handle_users_reply(sender_id, message_text):
+    db_password = os.environ["REDIS_PASSWORD"]
+    db_host = os.environ['REDIS_HOST']
+    db_port = os.environ['REDIS_PORT']
+
+    db = get_database_connection(
+        db_password,
+        db_host,
+        db_port
+    )
+
+    states_functions = {
+        'START': handle_start,
+    }
+
+    db_key = f"facebookid_{sender_id}"
+    recorded_state = db.get(db_key)
+    
+    if not recorded_state or recorded_state.decode("utf-8") not in states_functions.keys():
+        user_state = "START"
+    else:
+        user_state = recorded_state.decode("utf-8")
+    
+    if message_text == "/start":
+        user_state = "START"
+    
+    state_handler = states_functions[user_state]
+    next_state = state_handler(sender_id, message_text)
+    db.set(db_key, next_state)
+
+
+def get_database_connection(password, host, port):
+    database = redis.Redis(host=host, port=port, password=password)
+    return database
+
+
+@app.route('/', methods=['POST'])
+def webhook():
+    data = request.get_json()
+    if data["object"] == "page":
+        for entry in data["entry"]:
+            for messaging_event in entry["messaging"]:
+                if messaging_event.get("message"):
+                    sender_id = messaging_event["sender"]["id"]
+                    recipient_id = messaging_event["recipient"]["id"]
+                    message_text = messaging_event["message"]["text"]
+                    
+                    handle_users_reply(sender_id, message_text)
+    return "ok", 200
+
 
 if __name__ == '__main__':
     app.run(debug=True)
