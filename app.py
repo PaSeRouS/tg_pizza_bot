@@ -36,7 +36,7 @@ def send_menu(recipient_id, message_text):
                 "type": "template",
                 "payload": {
                     "template_type": "generic",
-                    "elements": get_elements_for_generic()
+                    "elements": get_elements_for_generic(message_text)
                 }
             }
         }
@@ -49,7 +49,7 @@ def send_menu(recipient_id, message_text):
     response.raise_for_status()
 
 
-def get_elements_for_generic():
+def get_elements_for_generic(category_name):
     # В сообщении кнопки выводятся по три штуки в сообщении и только на 10 слайдах
     elements = []
     buttons = []
@@ -86,7 +86,7 @@ def get_elements_for_generic():
     elements.append(element)
 
     for category in categories['data']:
-        if category['name'] == 'main_pizzas':
+        if category['name'] == category_name:
             category_id = category['id']
             products = get_products_by_category_id(client_id, client_secret, category_id)
             for product in products["data"]:
@@ -115,7 +115,7 @@ def get_elements_for_generic():
             button = {
                 "type": "postback",
                 "title": category['description'],
-                "payload": category['id'],
+                "payload": category['name'],
             }
 
             buttons.append(button)
@@ -160,9 +160,6 @@ def handle_users_reply(sender_id, message_text):
     else:
         user_state = recorded_state.decode("utf-8")
     
-    if message_text == "/start":
-        user_state = "START"
-    
     state_handler = states_functions[user_state]
     next_state = state_handler(sender_id, message_text)
     db.set(db_key, next_state)
@@ -179,11 +176,15 @@ def webhook():
     if data["object"] == "page":
         for entry in data["entry"]:
             for messaging_event in entry["messaging"]:
+                sender_id = messaging_event["sender"]["id"]
+                recipient_id = messaging_event["recipient"]["id"]
+
                 if messaging_event.get("message"):
-                    sender_id = messaging_event["sender"]["id"]
-                    recipient_id = messaging_event["recipient"]["id"]
-                    message_text = messaging_event["message"]["text"]
+                    message_text = 'main_pizzas'
+                elif messaging_event.get("postback"):
+                    message_text = messaging_event["postback"]["payload"]
                     
+                if message_text:
                     handle_users_reply(sender_id, message_text)
     return "ok", 200
 
