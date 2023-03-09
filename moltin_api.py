@@ -44,7 +44,7 @@ def get_products(client_id, client_secret):
     product_data = response.json()
 
     return {
-            product['name']: product['id'] 
+            product['name']: product['id']
             for product in product_data['data']
         }
 
@@ -186,4 +186,18 @@ def get_all_categories(client_id, client_secret):
     response.raise_for_status()
 
     return response.json()
+
+
+def get_last_category(client_id, client_secret):
+    headers = get_headers(client_id, client_secret)
+
+    response = requests.get('https://api.moltin.com/v2/categories', headers=headers)
+    response.raise_for_status()
+
+    all_categories = response.json()
+    category_id = ''
+
+    for category in all_categories['data']:
+        category_id = category['id']
     
+    return category_id

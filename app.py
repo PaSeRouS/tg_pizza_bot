@@ -3,7 +3,8 @@ import os
 import redis
 from flask import Flask, request
 
-from fb_functions import send_menu
+from fb_functions import send_menu, send_message
+from moltin_api import add_product_to_cart, get_product_by_id
 
 app = Flask(__name__)
 
@@ -20,12 +21,47 @@ def verify():
     return "Hello world", 200
 
 
-def handle_start(sender_id, message_text):
-    send_menu(sender_id, message_text)
-    return "START"
+def handle_start(sender_id, message):
+    send_menu(sender_id, message)
+    return "MENU"
 
 
-def handle_users_reply(sender_id, message_text):
+def handle_menu(sender_id, message):
+    if message['title'] == 'Добавить в корзину':
+        client_id = os.environ["CLIENT_ID"]
+        client_secret = os.environ["CLIENT_SECRET"]
+
+        cart_id = f"facebookid_{sender_id}"
+        add_product_to_cart(
+            cart_id,
+            message['value'],
+            1,
+            client_id,
+            client_secret
+        )
+
+        pizza = get_product_by_id(message['value'], client_id, client_secret)
+        pizza_name = pizza['data']['name']
+        message_text = f"В корзину добавлена пицца {pizza_name}"
+        send_message(sender_id, message_text)
+    else:
+        send_menu(sender_id, message)
+    
+    if message['value'] == 'cart':
+        return 'CART'
+    else:
+        return "MENU"
+
+
+def handle_cart(sender_id, message):
+    if message['value'] == 'return':
+        send_menu(sender_id, message)
+        return 'MENU'
+
+    return 'CART'
+
+
+def handle_users_reply(sender_id, message):
     db_password = os.environ["REDIS_PASSWORD"]
     db_host = os.environ['REDIS_HOST']
     db_port = os.environ['REDIS_PORT']
@@ -38,6 +74,8 @@ def handle_users_reply(sender_id, message_text):
 
     states_functions = {
         'START': handle_start,
+        'MENU': handle_menu,
+        'CART': handle_cart,
     }
 
     db_key = f"facebookid_{sender_id}"
@@ -49,7 +87,7 @@ def handle_users_reply(sender_id, message_text):
         user_state = recorded_state.decode("utf-8")
     
     state_handler = states_functions[user_state]
-    next_state = state_handler(sender_id, message_text)
+    next_state = state_handler(sender_id, message)
     db.set(db_key, next_state)
 
 
@@ -68,12 +106,20 @@ def webhook():
                 recipient_id = messaging_event["recipient"]["id"]
 
                 if messaging_event.get("message"):
-                    message_text = 'main_pizzas'
+                    message = {
+                        'type':  'message',
+                        'title': 'Сообщение',
+                        'value': messaging_event["message"]["text"]
+                    }
                 elif messaging_event.get("postback"):
-                    message_text = messaging_event["postback"]["payload"]
+                    message = {
+                        'type':  'postback',
+                        'title': messaging_event["postback"]["title"],
+                        'value': messaging_event["postback"]["payload"]
+                    }
                     
-                if message_text:
-                    handle_users_reply(sender_id, message_text)
+                if message:
+                    handle_users_reply(sender_id, message)
     return "ok", 200
 
 
