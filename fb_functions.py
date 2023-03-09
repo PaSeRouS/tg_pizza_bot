@@ -53,19 +53,42 @@ def send_menu(recipient_id, message):
     response.raise_for_status()
 
 
+def send_cart_menu(recipient_id, message):
+    params = {"access_token": FACEBOOK_TOKEN}
+    headers = {"Content-Type": "application/json"}
+
+    request_content = {
+        "recipient": {
+            "id": recipient_id
+        },
+        "message": {
+            "attachment": {
+                "type": "template",
+                "payload": {
+                    "template_type": "generic",
+                    "elements": get_elements_for_cart(recipient_id, message)
+                }
+            }
+        }
+    }
+
+    response = requests.post(
+        "https://graph.facebook.com/v2.6/me/messages",
+        params=params, headers=headers, json=request_content
+    )
+    response.raise_for_status()
+
+
 def get_elements_for_generic(sender_id, message):
-    # В сообщении кнопки выводятся по три штуки в сообщении и только на 10 слайдах
     elements = []
+    buttons = []
 
     client_id = os.environ["CLIENT_ID"]
     client_secret = os.environ["CLIENT_SECRET"]
 
     categories = get_all_categories(client_id, client_secret)
 
-    if message['value'] == 'cart':
-        cart_id = f"facebookid_{sender_id}"
-        cart_items, full_price = get_cart_and_full_price(cart_id, client_id, client_secret)
-    elif message['type'] == 'message':
+    if message['type'] == 'message':
         category_id = get_last_category(client_id, client_secret)
     elif message['type'] == 'postback':
         if message['value'] == 'return':
@@ -73,58 +96,30 @@ def get_elements_for_generic(sender_id, message):
         else:
             category_id = message['value']
 
-    if message['value'] == 'cart':
-        element = {
-            "title": f"Ваш заказ на сумму {full_price} рублей",
-            "image_url": "https://img.freepik.com/premium-vector/wicker-basket-on-white-background_43633-1813.jpg?w=740",
-            "subtitle": "",
-            "buttons": [
-                {
-                    "type": "postback",
-                    "title": "Самовывоз",
-                    "payload": "pickup",
-                },
-                {
-                    "type": "postback",
-                    "title": "Доставка",
-                    "payload": "delivery",
-                },
-                {
-                    "type": "postback",
-                    "title": "К меню",
-                    "payload": "return",
-                }
-            ]
-        }
-
-        elements.append(element)
-        return elements
-    else:
-        element = {
-            "title": "Меню",
-            "image_url": "https://img.freepik.com/premium-vector/pizza-logo-template-suitable-for-restaurant-and-cafe-logo_607277-267.jpg",
-            "subtitle": "Здесь вы можете выбрать один из вариантов",
-            "buttons": [
-                {
-                    "type": "postback",
-                    "title": "Корзина",
-                    "payload": "cart",
-                },
-                {
-                    "type": "postback",
-                    "title": "Акции",
-                    "payload": "promotion",
-                },
-                {
-                    "type": "postback",
-                    "title": "Сделать заказ",
-                    "payload": "make_order",
-                }
-            ]
-        }
+    element = {
+        "title": "Меню",
+        "image_url": "https://img.freepik.com/premium-vector/pizza-logo-template-suitable-for-restaurant-and-cafe-logo_607277-267.jpg",
+        "subtitle": "Здесь вы можете выбрать один из вариантов",
+        "buttons": [
+            {
+                "type": "postback",
+                "title": "Корзина",
+                "payload": "cart",
+            },
+            {
+                "type": "postback",
+                "title": "Акции",
+                "payload": "promotion",
+            },
+            {
+                "type": "postback",
+                "title": "Сделать заказ",
+                "payload": "make_order",
+            }
+        ]
+    }
 
     elements.append(element)
-    buttons = []
 
     for category in categories['data']:
         if category_id == category['id']:
@@ -170,3 +165,62 @@ def get_elements_for_generic(sender_id, message):
     elements.append(element)
 
     return elements
+
+
+def get_elements_for_cart(sender_id, message):
+    elements = []
+
+    client_id = os.environ["CLIENT_ID"]
+    client_secret = os.environ["CLIENT_SECRET"]
+
+    cart_id = f"facebookid_{sender_id}"
+    cart_items, full_price = get_cart_and_full_price(cart_id, client_id, client_secret)
+
+    element = {
+        "title": f"Ваш заказ на сумму {full_price} рублей",
+        "image_url": "https://img.freepik.com/premium-vector/wicker-basket-on-white-background_43633-1813.jpg?w=740",
+        "subtitle": "",
+        "buttons": [
+            {
+                "type": "postback",
+                "title": "Самовывоз",
+                "payload": "pickup",
+            },
+            {
+                "type": "postback",
+                "title": "Доставка",
+                "payload": "delivery",
+            },
+            {
+                "type": "postback",
+                "title": "К меню",
+                "payload": "return",
+            }
+        ]
+    }
+
+    elements.append(element)
+        
+    for item in cart_items:
+        element = {
+            "title": item['name'],
+            "image_url": item["image"]["href"],
+            "subtitle": item["description"],
+            "buttons": [
+                {
+                    "type": "postback",
+                    "title": "Добавить ещё одну",
+                    "payload": item["product_id"],
+                },
+                {
+                    "type": "postback",
+                    "title": "Убрать из корзины",
+                    "payload": item["id"],
+                }
+            ]
+        }
+
+        elements.append(element)
+
+    return elements
+        

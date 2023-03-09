@@ -3,8 +3,9 @@ import os
 import redis
 from flask import Flask, request
 
-from fb_functions import send_menu, send_message
+from fb_functions import send_menu, send_message, send_cart_menu
 from moltin_api import add_product_to_cart, get_product_by_id
+from moltin_api import remove_product_from_cart
 
 app = Flask(__name__)
 
@@ -44,19 +45,49 @@ def handle_menu(sender_id, message):
         pizza_name = pizza['data']['name']
         message_text = f"В корзину добавлена пицца {pizza_name}"
         send_message(sender_id, message_text)
+    elif message['value'] == 'cart':
+        send_cart_menu(sender_id, message)
+        return 'CART'
     else:
         send_menu(sender_id, message)
     
-    if message['value'] == 'cart':
-        return 'CART'
-    else:
-        return "MENU"
+    return "MENU"
 
 
 def handle_cart(sender_id, message):
+    client_id = os.environ["CLIENT_ID"]
+    client_secret = os.environ["CLIENT_SECRET"]
+
+    cart_id = f"facebookid_{sender_id}"
+
     if message['value'] == 'return':
         send_menu(sender_id, message)
         return 'MENU'
+    elif message['title'] == 'Добавить ещё одну':
+        add_product_to_cart(
+            cart_id,
+            message['value'],
+            1,
+            client_id,
+            client_secret
+        )
+
+        pizza = get_product_by_id(message['value'], client_id, client_secret)
+        pizza_name = pizza['data']['name']
+        message_text = f"В корзину добавлена пицца {pizza_name}"
+        send_message(sender_id, message_text)
+    elif message['title'] == 'Убрать из корзины':
+        remove_product_from_cart(
+            cart_id,
+            message['value'],
+            client_id,
+            client_secret
+        )
+
+        message_text = "Пицца удалена из корзины"
+        send_message(sender_id, message_text)
+
+    send_cart_menu(sender_id, message)
 
     return 'CART'
 
