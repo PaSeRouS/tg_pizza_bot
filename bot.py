@@ -277,7 +277,6 @@ def handle_cart(update, context):
 
         return 'WAITING_GEO'
 
-
     remove_product_from_cart(
         update.effective_chat.id,
         users_reply,
@@ -525,15 +524,17 @@ def handle_users_reply(update, context):
     if update.message:
         user_reply = update.message.text
         chat_id = update.message.chat_id
+        db_key = f"telegramid_{chat_id}"
     elif update.callback_query:
         user_reply = update.callback_query.data
         chat_id = update.callback_query.message.chat_id
+        db_key = f"telegramid_{chat_id}"
     else:
         return
     if user_reply == '/start':
         user_state = 'START'
     else:
-        user_state = db.get(chat_id).decode("utf-8")
+        user_state = db.get(db_key).decode("utf-8")
 
     states_functions = {
         'START': start,
@@ -548,7 +549,7 @@ def handle_users_reply(update, context):
 
     try:
         next_state = state_handler(update, context)
-        db.set(chat_id, next_state)
+        db.set(db_key, next_state)
     except Exception as err:
         print(err)
 
