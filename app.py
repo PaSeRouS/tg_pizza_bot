@@ -3,6 +3,7 @@ import os
 import redis
 from flask import Flask, request
 
+from database_functions import get_database_connection
 from fb_functions import send_menu, send_message, send_cart_menu
 from moltin_api import add_product_to_cart, get_product_by_id
 from moltin_api import remove_product_from_cart
@@ -120,11 +121,6 @@ def handle_users_reply(sender_id, message):
     state_handler = states_functions[user_state]
     next_state = state_handler(sender_id, message)
     db.set(db_key, next_state)
-
-
-def get_database_connection(password, host, port):
-    database = redis.Redis(host=host, port=port, password=password)
-    return database
 
 
 @app.route('/', methods=['POST'])

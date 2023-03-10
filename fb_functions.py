@@ -1,7 +1,10 @@
+from time import time
+import json
 import os
 
 import requests
 
+from database_functions import get_database_connection
 from moltin_api import get_image_url, get_products_by_category_id
 from moltin_api import get_all_categories, get_last_category
 from moltin_api import get_cart_and_full_price
@@ -36,13 +39,7 @@ def send_menu(recipient_id, message):
             "id": recipient_id
         },
         "message": {
-            "attachment": {
-                "type": "template",
-                "payload": {
-                    "template_type": "generic",
-                    "elements": get_elements_for_generic(recipient_id, message)
-                }
-            }
+            "attachment": get_menu(message)
         }
     }
 
@@ -79,7 +76,7 @@ def send_cart_menu(recipient_id, message):
     response.raise_for_status()
 
 
-def get_elements_for_generic(sender_id, message):
+def create_menu(message):
     elements = []
     buttons = []
 
@@ -164,7 +161,18 @@ def get_elements_for_generic(sender_id, message):
 
     elements.append(element)
 
-    return elements
+    menu = {
+        "attachment": {
+            "type": "template",
+            "payload": {
+                "template_type": "generic",
+                "elements": elements
+            }
+        },
+        'created_at': time()
+    }
+
+    return menu
 
 
 def get_elements_for_cart(sender_id, message):
@@ -223,4 +231,44 @@ def get_elements_for_cart(sender_id, message):
         elements.append(element)
 
     return elements
-        
+
+
+def get_menu(message):
+    db_password = os.environ["REDIS_PASSWORD"]
+    db_host = os.environ['REDIS_HOST']
+    db_port = os.environ['REDIS_PORT']
+
+    db = get_database_connection(
+        db_password,
+        db_host,
+        db_port
+    )
+
+    if message['type'] == 'message' or message['value'] == 'return':
+        menu_type = 'main'
+    elif message['title'] == 'Основные пиццы':
+        menu_type = 'main'
+    elif message['title'] == 'Особые пиццы':
+        menu_type = 'special'
+    elif message['title'] == 'Сытные пиццы':
+        menu_type = 'nourishing'
+    elif message['title'] == 'Острые пиццы':
+        menu_type = 'hot'
+
+    cached_menu = db.get(menu_type)
+    
+    if cached_menu:
+        cached_menu = json.loads(cached_menu)
+        time_diff = time() - cached_menu['created_at']
+        if time_diff > 3600:
+            menu = create_menu(message)
+            db.set(menu_type, json.dumps(menu))
+            menu = menu['attachment']
+        else:
+            menu = cached_menu['attachment']
+    else:
+        menu = create_menu(message)
+        db.set(menu_type, json.dumps(menu))
+        menu = menu['attachment']
+
+    return menu
