@@ -30,7 +30,7 @@ def send_message(recipient_id, message_text):
     response.raise_for_status()
 
 
-def send_menu(recipient_id, message):
+def send_menu(recipient_id, message, app_config):
     params = {"access_token": FACEBOOK_TOKEN}
     headers = {"Content-Type": "application/json"}
 
@@ -39,7 +39,7 @@ def send_menu(recipient_id, message):
             "id": recipient_id
         },
         "message": {
-            "attachment": get_menu(message)
+            "attachment": get_menu(message, app_config)
         }
     }
 
@@ -93,9 +93,11 @@ def create_menu(message):
         else:
             category_id = message['value']
 
+    image_url = "https://img.freepik.com/premium-vector/pizza-logo-template-suitable-for-restaurant-and-cafe-logo_607277-267.jpg"
+
     element = {
         "title": "Меню",
-        "image_url": "https://img.freepik.com/premium-vector/pizza-logo-template-suitable-for-restaurant-and-cafe-logo_607277-267.jpg",
+        "image_url": image_url,
         "subtitle": "Здесь вы можете выбрать один из вариантов",
         "buttons": [
             {
@@ -184,9 +186,11 @@ def get_elements_for_cart(sender_id, message):
     cart_id = f"facebookid_{sender_id}"
     cart_items, full_price = get_cart_and_full_price(cart_id, client_id, client_secret)
 
+    image_url = "https://img.freepik.com/premium-vector/wicker-basket-on-white-background_43633-1813.jpg?w=740"
+
     element = {
         "title": f"Ваш заказ на сумму {full_price} рублей",
-        "image_url": "https://img.freepik.com/premium-vector/wicker-basket-on-white-background_43633-1813.jpg?w=740",
+        "image_url": image_url,
         "subtitle": "",
         "buttons": [
             {
@@ -233,16 +237,8 @@ def get_elements_for_cart(sender_id, message):
     return elements
 
 
-def get_menu(message):
-    db_password = os.environ["REDIS_PASSWORD"]
-    db_host = os.environ['REDIS_HOST']
-    db_port = os.environ['REDIS_PORT']
-
-    db = get_database_connection(
-        db_password,
-        db_host,
-        db_port
-    )
+def get_menu(message, app_config):
+    db = app_config['database']
 
     if message['type'] == 'message' or message['value'] == 'return':
         menu_type = 'main'
@@ -272,3 +268,4 @@ def get_menu(message):
         menu = menu['attachment']
 
     return menu
+        

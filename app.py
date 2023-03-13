@@ -3,7 +3,6 @@ import os
 import redis
 from flask import Flask, request
 
-from database_functions import get_database_connection
 from fb_functions import send_menu, send_message, send_cart_menu
 from moltin_api import add_product_to_cart, get_product_by_id
 from moltin_api import remove_product_from_cart
@@ -23,12 +22,12 @@ def verify():
     return "Hello world", 200
 
 
-def handle_start(sender_id, message):
-    send_menu(sender_id, message)
+def handle_start(sender_id, message, app_config):
+    send_menu(sender_id, message, app_config)
     return "MENU"
 
 
-def handle_menu(sender_id, message):
+def handle_menu(sender_id, message, app_config):
     if message['title'] == 'Добавить в корзину':
         client_id = os.environ["CLIENT_ID"]
         client_secret = os.environ["CLIENT_SECRET"]
@@ -50,19 +49,19 @@ def handle_menu(sender_id, message):
         send_cart_menu(sender_id, message)
         return 'CART'
     else:
-        send_menu(sender_id, message)
+        send_menu(sender_id, message, app_config)
     
     return "MENU"
 
 
-def handle_cart(sender_id, message):
+def handle_cart(sender_id, message, app_config):
     client_id = os.environ["CLIENT_ID"]
     client_secret = os.environ["CLIENT_SECRET"]
 
     cart_id = f"facebookid_{sender_id}"
 
     if message['value'] == 'return':
-        send_menu(sender_id, message)
+        send_menu(sender_id, message, app_config)
         return 'MENU'
     elif message['title'] == 'Добавить ещё одну':
         add_product_to_cart(
@@ -93,16 +92,8 @@ def handle_cart(sender_id, message):
     return 'CART'
 
 
-def handle_users_reply(sender_id, message):
-    db_password = os.environ["REDIS_PASSWORD"]
-    db_host = os.environ['REDIS_HOST']
-    db_port = os.environ['REDIS_PORT']
-
-    db = get_database_connection(
-        db_password,
-        db_host,
-        db_port
-    )
+def handle_users_reply(sender_id, message, app_config):
+    db = app_config['database']
 
     states_functions = {
         'START': handle_start,
@@ -119,12 +110,21 @@ def handle_users_reply(sender_id, message):
         user_state = recorded_state.decode("utf-8")
     
     state_handler = states_functions[user_state]
-    next_state = state_handler(sender_id, message)
+    next_state = state_handler(sender_id, message, app_config)
     db.set(db_key, next_state)
 
 
 @app.route('/', methods=['POST'])
 def webhook():
+    if not app.config.get('database'):
+        app.config.update(
+            database=redis.Redis(
+                host=os.environ["REDIS_HOST"],
+                port=os.environ["REDIS_PORT"],
+                password=os.environ["REDIS_PASSWORD"],
+            )
+        )
+
     data = request.get_json()
     if data["object"] == "page":
         for entry in data["entry"]:
@@ -146,7 +146,7 @@ def webhook():
                     }
                     
                 if message:
-                    handle_users_reply(sender_id, message)
+                    handle_users_reply(sender_id, message, app.config)
     return "ok", 200
 
 
